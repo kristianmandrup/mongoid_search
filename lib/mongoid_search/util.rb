@@ -13,7 +13,11 @@ module Util
               attribute.map(&method).map { |t| Util.normalize_keywords t, stem_keywords, ignore_list }
             end
           else
-            Util.normalize_keywords(attribute.send(method), stem_keywords, ignore_list)
+            if method.is_a?(Array)                                                   
+              method.map { |mf| Util.normalize_keywords(attribute.send(mf), stem_keywords, ignore_list) }
+            else                                                                     
+              Util.normalize_keywords(attribute.send(method), stem_keywords, ignore_list)
+            end
           end
         end
       end
