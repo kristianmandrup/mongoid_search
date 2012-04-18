@@ -5,7 +5,6 @@ module Mongoid::Search
     @classes << base
     cattr_accessor :search_fields, :match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list
   end
-  end
 
   def self.classes
     @classes
