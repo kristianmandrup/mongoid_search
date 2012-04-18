@@ -2,9 +2,8 @@ module Mongoid::Search
   
   def self.included(base)
     
-    base.class_eval do
-    cattr_accessor :search_fields, :match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list
-    end
+    
+    
     @classes ||= []
     @classes << base
   end
@@ -28,6 +27,8 @@ module Mongoid::Search
       index :_keywords, :background => true
 
       before_save :set_keywords
+      cattr_accessor :search_fields, :match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list
+ 
     end
 
     def search(query, options={})
