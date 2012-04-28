@@ -5,8 +5,9 @@ class Product
   field :name
   field :attrs, :type => Array
 
-  references_many :tags
-  referenced_in   :category
+  has_many :tags
+  belongs_to   :category
+
   embeds_many     :subproducts
 
   search_in :brand, :name, :outlet, :attrs, :tags => :name, :category => :name, :subproducts => [:brand, :name]

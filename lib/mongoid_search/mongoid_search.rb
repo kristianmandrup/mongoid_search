@@ -4,16 +4,25 @@ module Mongoid::Search
   def self.included(base)    
     @classes ||= []
     @classes << base
+    base.extend ClassMethods
+
+    base.class_eval do
+      cattr_accessor *Mongoid::Search.search_macros
+    end
   end
 
   def self.classes
     @classes
   end
 
+  def self.search_macros
+    [:match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list, :stemmer_class, :search_fields]
+  end
+
   module ClassMethods #:nodoc:
     # Set a field or a number of fields as sources for search
     def search_in(*args)
-      options = args.last.is_a?(Hash) && [:match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list].include?(args.last.keys.first) ? args.pop : {}
+      options = args.last.is_a?(Hash) && Mongoid::Search.search_macros.include?(args.last.keys.first) ? args.pop : {}
       self.match              = [:any, :all].include?(options[:match]) ? options[:match] : :any
       self.allow_empty_search = [true, false].include?(options[:allow_empty_search]) ? options[:allow_empty_search] : false
       self.relevant_search    = [true, false].include?(options[:relevant_search]) ? options[:relevant_search] : false
@@ -29,11 +38,13 @@ module Mongoid::Search
       self.search_fields      = (self.search_fields || []).concat args
 
       field :_keywords, :type => Array
-      index :_keywords, :background => true
 
-      before_save :set_keywords
-      cattr_accessor :search_fields, :match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list
- 
+      # mongoid 3.0 
+      # index(name: 1, options: { name: "index_name" })
+
+      index :_keywords => 1, :options => {:background => true}
+
+      before_save :set_keywords 
     end
 
     def search(query, options={})
