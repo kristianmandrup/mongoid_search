@@ -1,9 +1,7 @@
+require "mongoid_search/stemmers"
+
 module Mongoid::Search
-  
-  def self.included(base)
-    
-    
-    
+  def self.included(base)    
     @classes ||= []
     @classes << base
   end
@@ -18,8 +16,15 @@ module Mongoid::Search
       options = args.last.is_a?(Hash) && [:match, :allow_empty_search, :relevant_search, :stem_keywords, :ignore_list].include?(args.last.keys.first) ? args.pop : {}
       self.match              = [:any, :all].include?(options[:match]) ? options[:match] : :any
       self.allow_empty_search = [true, false].include?(options[:allow_empty_search]) ? options[:allow_empty_search] : false
-      self.relevant_search    = [true, false].include?(options[:relevant_search]) ? options[:allow_empty_search] : false
-      self.stem_keywords      = [true, false].include?(options[:stem_keywords]) ? options[:allow_empty_search] : false
+      self.relevant_search    = [true, false].include?(options[:relevant_search]) ? options[:relevant_search] : false
+      self.stemmer_class      = options[:stemmer_class]
+      self.stem_keywords      = !!stemmer_class || options[:stem_keywords]
+      self.stemmer_class    ||= MongoidSearch::Stemmers.available
+
+      if stem_keywords && stemmer_class.nil?
+        raise "No stemmer found. Please, install either fast-stemmer or ruby-stemmer."
+      end
+
       self.ignore_list        = YAML.load(File.open(options[:ignore_list]))["ignorelist"] if options[:ignore_list].present?
       self.search_fields      = (self.search_fields || []).concat args
 
@@ -45,13 +50,17 @@ module Mongoid::Search
 
     def search_without_relevance(query, options={})
       return criteria.all if query.blank? && allow_empty_search
-      criteria.send("#{(options[:match]||self.match).to_s}_in", :_keywords => Util.normalize_keywords(query, stem_keywords, ignore_list).map { |q| /#{q}/ })
+      criteria.send("#{(options[:match]||self.match).to_s}_in", :_keywords => MongoidSearch::Util.normalize_keywords(query, keyword_stemmer(options), ignore_list).map { |q| /#{q}/ })
+    end
+
+    def keyword_stemmer(options={})
+      stemmer_class.new(:language => options[:language]) if stem_keywords
     end
 
     def search_relevant(query, options={})
       return criteria.all if query.blank? && allow_empty_search
 
-      keywords = Util.normalize_keywords(query, stem_keywords, ignore_list)
+      keywords = MongoidSearch::Util.normalize_keywords(query, keyword_stemmer(options), ignore_list)
 
       map = <<-EOS
         function() {
@@ -93,18 +102,27 @@ module Mongoid::Search
     # Goes through all documents in the class that includes Mongoid::Search
     # and indexes the keywords.
     def index_keywords!
-      all.each { |d| d.index_keywords! ? Log.green(".") : Log.red("F") }
+      all.each { |d| d.index_keywords! ? MongoidSearch::Log.green(".") : MongoidSearch::Log.red("F") }
     end
   end
 
+  # Indexes the document keywords
   def index_keywords!
     update_attribute(:_keywords, set_keywords)
+  end
+
+  def keyword_language
+    super if defined?(super)
+  end
+
+  def keyword_stemmer
+    self.class.stemmer_class.new(:language => keyword_language) if stem_keywords
   end
 
   private
   def set_keywords
     self._keywords = self.search_fields.map do |field|
-      Util.keywords(self, field, stem_keywords, ignore_list)
+      MongoidSearch::Util.keywords(self, field, keyword_stemmer, ignore_list)
     end.flatten.reject{|k| k.nil? || k.empty?}.uniq.sort
   end
 end
